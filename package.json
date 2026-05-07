@@ -1,0 +1,7 @@
+{
+  "name": "blender-addon-bounding-box",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "zip -r bounding-box.zip src/"
+  }
+}
