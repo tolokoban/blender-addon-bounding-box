@@ -164,7 +164,8 @@ def slice_z(obj_parent, bbox, levels, level):
     else:
         obj_parent.name = obj_parent.name.removeprefix("Octree")
         print(f"Block {obj_parent.name} has {len(obj_parent.data.vertices)} vertices")
-        create_bbox(bbox[0], bbox[1], levels)
+        voxel = create_bbox(bbox[0], bbox[1], levels)
+        voxel.name = f"{obj_parent.name}.Voxel"
         save_mesh_as_glb(obj_parent)
         
 def slice_y(obj_parent, bbox, levels, level):

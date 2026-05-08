@@ -9,6 +9,7 @@ bl_info = {
 import bpy
 import bmesh
 import json
+import math
 import os
 import mathutils
 
@@ -51,9 +52,9 @@ def compute_bbox_from_list(objects):
         min([v[0].z for v in bboxes]), 
     ))
     max_v = mathutils.Vector((
-        min([v[1].x for v in bboxes]), 
-        min([v[1].y for v in bboxes]), 
-        min([v[1].z for v in bboxes]), 
+        max([v[1].x for v in bboxes]), 
+        max([v[1].y for v in bboxes]), 
+        max([v[1].z for v in bboxes]), 
     ))
     # Make if a regular cube
     center = (min_v + max_v) / 2
@@ -196,6 +197,18 @@ class BBOX_OT_lods(bpy.types.Operator):
                 [min_v.x, min_v.y, min_v.z],
                 [max_v.x, max_v.y, max_v.z]
             ]
+            # Create wireframe box matching bbox
+            center = (min_v + max_v) / 2
+            scale = (max_v - min_v) / 2
+            voxels_col = bpy.data.collections.new("Voxels")
+            collection.children.link(voxels_col)
+            bpy.ops.mesh.primitive_cube_add(location=center)
+            bbox_obj = context.active_object
+            bbox_obj.name = "0.Voxel"
+            bbox_obj.scale = scale
+            bbox_obj.display_type = 'WIRE'
+            voxels_col.objects.link(bbox_obj)
+            context.collection.objects.unlink(bbox_obj)
             root = "."
             level = max_level
             while level > 0:
@@ -246,7 +259,12 @@ class BBOX_OT_lods(bpy.types.Operator):
                 json.dumps({
                     "bbox": {
                         "min": bbox[0],
-                        "max": bbox[1]
+                        "max": bbox[1],
+                        "center": [
+                            (bbox[0][0] + bbox[1][0]) / 2,
+                            (bbox[0][1] + bbox[1][1]) / 2,
+                            (bbox[0][2] + bbox[1][2]) / 2,
+                        ]
                     }
                 }, indent=4),
                 f"Output: {root}",
@@ -261,6 +279,26 @@ class BBOX_OT_lods(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class BBOX_OT_import_glb(bpy.types.Operator):
+    bl_idname = "bbox.import_glb"
+    bl_label = "Import GLB without transform"
+
+    filepath: bpy.props.StringProperty(subtype='FILE_PATH')
+    filter_glob: bpy.props.StringProperty(default="*.glb", options={'HIDDEN'})
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+    def execute(self, context):
+        before = set(context.scene.objects)
+        bpy.ops.import_scene.gltf(filepath=self.filepath)
+        rot = mathutils.Matrix.Rotation(math.radians(-90), 4, 'X')
+        for obj in set(context.scene.objects) - before:
+            obj.matrix_world = rot @ obj.matrix_world
+        return {'FINISHED'}
+
+
 class BBOX_PT_panel(bpy.types.Panel):
     bl_label = "Bounding Box"
     bl_idname = "BBOX_PT_panel"
@@ -270,6 +308,8 @@ class BBOX_PT_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.operator("bbox.import_glb")
+        layout.separator()
         obj = context.active_object
 
         if obj is None:
@@ -301,12 +341,14 @@ class BBOX_PT_panel(bpy.types.Panel):
                      icon='TRIA_DOWN' if context.scene.bbox_lod_report_expanded else 'TRIA_RIGHT',
                      text="Report", emboss=False)
             if context.scene.bbox_lod_report_expanded:
+                col = box.column(align=True)
+                col.scale_y = 0.6
                 for line in context.scene.bbox_lod_report.split("\n"):
-                    box.label(text=line)
+                    col.label(text=line)
                 box.operator("bbox.copy_report")
 
 
-classes = (BBOX_OT_copy, BBOX_OT_show, BBOX_OT_split, BBOX_OT_copy_report, BBOX_OT_lods, BBOX_PT_panel)
+classes = (BBOX_OT_copy, BBOX_OT_show, BBOX_OT_split, BBOX_OT_copy_report, BBOX_OT_lods, BBOX_OT_import_glb, BBOX_PT_panel)
 
 
 def register():
