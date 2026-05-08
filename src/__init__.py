@@ -63,12 +63,18 @@ def compute_bbox_from_list(objects):
     max_v = center + mathutils.Vector((half, half, half))
     return min_v, max_v
 
-def decimate(obj):
+def decimate(obj, ratio):
     print("Decimate...")
     mod = obj.modifiers.new(name="Decimate", type='DECIMATE')
-    mod.ratio = 0.13
+    mod.ratio = ratio
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.modifier_apply(modifier=mod.name)
+
+def compute_ratio(detailed_obj_vertex_count, rough_obj_vertex_count, levels):
+    return (
+        (min(rough_obj_vertex_count, detailed_obj_vertex_count / 2) / detailed_obj_vertex_count)
+        ** (1 / levels)
+    )
 
 class BBOX_OT_copy(bpy.types.Operator):
     bl_idname = "bbox.copy_to_clipboard"
@@ -156,6 +162,10 @@ class BBOX_OT_split(bpy.types.Operator):
 
 def generate_decimated_lods(collection, obj, level):
     print(f"Decimating {level} LODs...")
+    detailed_obj_vertex_count = len(obj.data.vertices)
+    rough_obj_vertex_count = 100000
+    ratio = compute_ratio(detailed_obj_vertex_count, rough_obj_vertex_count, level)
+    print(f"Decimation ratio: {100 * ratio} %")
     lods_col = bpy.data.collections.new("LODs")
     collection.children.link(lods_col)
     lods = [utils.clone(obj, "LOD-" + str(level))]
@@ -163,7 +173,7 @@ def generate_decimated_lods(collection, obj, level):
     for i in range(level - 1, -1, -1):
         new_obj = utils.clone(lods[-1], "LOD-" + str(i))
         lods_col.objects.link(new_obj)
-        decimate(new_obj)
+        decimate(new_obj, ratio)
         lods.append(new_obj)
     print("Generated:", ", ".join([obj.name for obj in lods]))
     return lods
